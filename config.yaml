@@ -1,0 +1,18 @@
+# Talky Configuration
+
+# Hotkey to trigger recording
+hotkey: "ctrl+shift+space"
+
+# Recording duration in seconds
+recording_duration_sec: 5.0
+
+# OpenAI API settings
+openai:
+  api_key: "your-openai-api-key-here"
+  model: "whisper-1"
+
+# Audio recording settings
+audio:
+  sample_rate: 16000
+  channels: 1
+  audio_format: 2 # 16-bit PCM
