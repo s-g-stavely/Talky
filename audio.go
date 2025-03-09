@@ -2,29 +2,46 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"os"
 	"time"
 
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 	"github.com/gordonklaus/portaudio"
 )
 
+// AudioRecorder handles audio recording functionality
+type AudioRecorder struct {
+	SampleRate int
+	Channels   int
+	BitDepth   int
+}
+
+// NewAudioRecorder creates a new audio recorder with the specified settings
+func NewAudioRecorder(sampleRate, channels, bitDepth int) *AudioRecorder {
+	return &AudioRecorder{
+		SampleRate: sampleRate,
+		Channels:   channels,
+		BitDepth:   bitDepth,
+	}
+}
+
 // RecordAudio records audio from the default input device for the specified duration
-func RecordAudio(durationSec float64) ([]byte, error) {
+func (ar *AudioRecorder) RecordAudio(durationSec float64) ([]int16, error) {
 	// Initialize PortAudio
 	if err := portaudio.Initialize(); err != nil {
 		return nil, err
 	}
 	defer portaudio.Terminate()
 
-	// Default configuration
-	sampleRate := 16000 // 16 kHz, which works well with Whisper
-	channels := 1       // Mono
-	frameSize := 1024   // Number of samples per frame
+	frameSize := 1024 // Number of samples per frame
 
 	// Open default input stream
-	inputBuffer := make([]int16, frameSize)
-	audioBuffer := new(bytes.Buffer)
+	inputBuffer := make([]int16, frameSize*ar.Channels)
+	var allSamples []int16
 
-	stream, err := portaudio.OpenDefaultStream(channels, 0, float64(sampleRate), frameSize, inputBuffer)
+	stream, err := portaudio.OpenDefaultStream(ar.Channels, 0, float64(ar.SampleRate), frameSize, inputBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -44,12 +61,8 @@ func RecordAudio(durationSec float64) ([]byte, error) {
 			return nil, err
 		}
 
-		// Convert and write samples to buffer
-		for _, sample := range inputBuffer {
-			// Write the int16 sample as bytes to the buffer
-			audioBuffer.WriteByte(byte(sample))
-			audioBuffer.WriteByte(byte(sample >> 8))
-		}
+		// Append the samples to our slice
+		allSamples = append(allSamples, inputBuffer...)
 	}
 
 	// Stop recording
@@ -57,14 +70,148 @@ func RecordAudio(durationSec float64) ([]byte, error) {
 		return nil, err
 	}
 
-	return audioBuffer.Bytes(), nil
+	return allSamples, nil
 }
 
 // SaveWaveFile writes the recorded audio to a WAV file
-// Useful for debugging or sending to the Whisper API
-func SaveWaveFile(filename string, audioData []byte, sampleRate, channels int) error {
-	// In a real implementation, you'd write proper WAV file headers
-	// and format the audio data correctly.
-	// This is a placeholder for that functionality.
+func (ar *AudioRecorder) SaveWaveFile(filename string, samples []int16) error {
+	// Create the output file
+	out, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer out.Close()
+
+	// Create a new encoder
+	enc := wav.NewEncoder(out, ar.SampleRate, ar.BitDepth, ar.Channels, 1) // 1 = PCM format
+	defer enc.Close()
+
+	// Convert the int16 samples to an audio.IntBuffer
+	buf := &audio.IntBuffer{
+		Format: &audio.Format{
+			NumChannels: ar.Channels,
+			SampleRate:  ar.SampleRate,
+		},
+		Data:           make([]int, len(samples)),
+		SourceBitDepth: ar.BitDepth,
+	}
+
+	// Convert int16 samples to int for the IntBuffer
+	for i, sample := range samples {
+		buf.Data[i] = int(sample)
+	}
+
+	// Write the buffer to the encoder
+	if err := enc.Write(buf); err != nil {
+		return fmt.Errorf("failed to write audio data: %w", err)
+	}
+
 	return nil
+}
+
+// RecordAndSaveWAV records audio and saves it directly to a WAV file
+func (ar *AudioRecorder) RecordAndSaveWAV(filename string, durationSec float64) error {
+	samples, err := ar.RecordAudio(durationSec)
+	if err != nil {
+		return err
+	}
+
+	return ar.SaveWaveFile(filename, samples)
+}
+
+// RecordToBytes records audio and returns it as a WAV file in a byte slice
+func (ar *AudioRecorder) RecordToBytesAndSave(durationSec float64, filename string) ([]byte, error) {
+	samples, err := ar.RecordAudio(durationSec)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ar.SaveWaveFile(filename, samples)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Use a buffer to hold the WAV data
+	buf := &bytes.Buffer{}
+
+	// Create a seekable buffer wrapper around our bytes.Buffer
+	seekableBuf := &SeekableBuffer{buf: buf, pos: 0}
+
+	// Create an encoder that writes to our seekable buffer
+	// Make sure we're using a valid bit depth (16 is standard for Whisper)
+	bitDepth := ar.BitDepth
+	if bitDepth != 8 && bitDepth != 16 && bitDepth != 24 && bitDepth != 32 {
+		return nil, fmt.Errorf("unsupported bit depth: %d", bitDepth)
+	}
+
+	enc := wav.NewEncoder(seekableBuf, ar.SampleRate, bitDepth, ar.Channels, 1) // 1 = PCM format
+
+	// Create an audio buffer from our samples
+	audioBuf := &audio.IntBuffer{
+		Format: &audio.Format{
+			NumChannels: ar.Channels,
+			SampleRate:  ar.SampleRate,
+		},
+		Data:           make([]int, len(samples)),
+		SourceBitDepth: bitDepth,
+	}
+
+	// Convert int16 samples to int for the IntBuffer
+	for i, sample := range samples {
+		audioBuf.Data[i] = int(sample)
+	}
+
+	// Write the buffer to the encoder
+	if err := enc.Write(audioBuf); err != nil {
+		return nil, fmt.Errorf("failed to encode audio data: %w", err)
+	}
+
+	// Close the encoder to finalize the WAV header
+	if err := enc.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close encoder: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// SeekableBuffer is a wrapper around bytes.Buffer that implements io.WriteSeeker
+type SeekableBuffer struct {
+	buf *bytes.Buffer
+	pos int64
+}
+
+// Write implements io.Writer
+func (sb *SeekableBuffer) Write(p []byte) (n int, err error) {
+	n, err = sb.buf.Write(p)
+	sb.pos += int64(n)
+	return
+}
+
+// Seek implements io.Seeker
+func (sb *SeekableBuffer) Seek(offset int64, whence int) (int64, error) {
+	newPos := int64(0)
+
+	switch whence {
+	case 0: // io.SeekStart
+		newPos = offset
+	case 1: // io.SeekCurrent
+		newPos = sb.pos + offset
+	case 2: // io.SeekEnd
+		newPos = int64(sb.buf.Len()) + offset
+	default:
+		return 0, fmt.Errorf("invalid whence value: %d", whence)
+	}
+
+	if newPos < 0 {
+		return 0, fmt.Errorf("negative position")
+	}
+
+	if newPos > int64(sb.buf.Len()) {
+		// If seeking beyond the end, pad with zeros
+		sb.buf.Write(make([]byte, newPos-int64(sb.buf.Len())))
+	}
+
+	sb.pos = newPos
+	return sb.pos, nil
 }

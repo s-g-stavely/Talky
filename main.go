@@ -5,14 +5,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/getlantern/systray"
+	hook "github.com/robotn/gohook"
 )
 
 func main() {
-	// Initialize application
-	config, err := LoadConfig("config.yaml")
+	add()
+
+	// Load configuration
+	config, err := LoadConfig(filepath.Join(".", "config.yaml"))
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
@@ -32,31 +36,33 @@ func onReady(config *Config) func() {
 		systray.SetTooltip("Speech-to-text at your cursor")
 		mQuit := systray.AddMenuItem("Quit", "Quit the application")
 
-		// Set up hotkey listeners
-		hotkeyManager, err := NewHotkeyManager()
-		if err != nil {
-			log.Fatalf("Failed to initialize hotkey manager: %v", err)
-		}
-		defer hotkeyManager.Close()
-
-		// Register hotkey for triggering recording
-		err = hotkeyManager.Register(config.Hotkey, func() {
+		hook.Register(hook.KeyUp, []string{"w"}, func(e hook.Event) {
 			fmt.Println("Hotkey pressed! Starting recording...")
 
-			// Start audio recording
-			audioData, err := RecordAudio(config.RecordingDurationSec)
+			// Create audio recorder
+			recorder := NewAudioRecorder(
+				config.Audio.SampleRate,
+				config.Audio.Channels,
+				config.Audio.BitDepth,
+			)
+
+			// Record to a file directly
+			recordingFilePath := "recording.wav"
+			err := recorder.RecordAndSaveWAV(recordingFilePath, config.RecordingDurationSec)
 			if err != nil {
 				log.Printf("Failed to record audio: %v", err)
 				return
 			}
 
-			// Transcribe with Whisper API
+			// Transcribe with Whisper API using the file directly
 			client := NewWhisperClient(config.OpenAI.APIKey)
-			transcription, err := client.Transcribe(audioData)
+			transcription, err := client.TranscribeFile(recordingFilePath)
 			if err != nil {
 				log.Printf("Failed to transcribe audio: %v", err)
 				return
 			}
+
+			log.Printf("Transcription: %s", transcription)
 
 			// Insert text at cursor position
 			err = InsertTextAtCursor(transcription)
@@ -64,11 +70,13 @@ func onReady(config *Config) func() {
 				log.Printf("Failed to insert text: %v", err)
 				return
 			}
+
+			// Optionally remove the recording file when done
+			// os.Remove(recordingFilePath)
 		})
 
-		if err != nil {
-			log.Fatalf("Failed to register hotkey: %v", err)
-		}
+		s := hook.Start()
+		<-hook.Process(s)
 
 		// Wait for quit action
 		go func() {
@@ -80,4 +88,12 @@ func onReady(config *Config) func() {
 
 func onExit() {
 	// Clean up resources if needed
+}
+
+func add() {
+
+	fmt.Println("--- Please press w---")
+	hook.Register(hook.KeyDown, []string{"w"}, func(e hook.Event) {
+		fmt.Println("keyDown: ", "w")
+	})
 }

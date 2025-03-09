@@ -23,3 +23,8 @@ go.work.sum
 
 # env file
 .env
+
+portaudio/
+
+# Ignore API key file containing sensitive information
+apikey.yaml

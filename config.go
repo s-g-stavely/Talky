@@ -1,58 +1,63 @@
 package main
 
 import (
-	"io/ioutil"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
 
 // Config holds the application configuration
 type Config struct {
-	// Hotkey combination to trigger recording (e.g., "ctrl+shift+space")
-	Hotkey string `yaml:"hotkey"`
-
-	// Recording duration in seconds
-	RecordingDurationSec float64 `yaml:"recording_duration_sec"`
-
-	// OpenAI API configuration
-	OpenAI struct {
-		APIKey string `yaml:"api_key"`
-		Model  string `yaml:"model"` // whisper-1 or other variants
-	} `yaml:"openai"`
-
-	// Audio settings
-	Audio struct {
-		SampleRate  int `yaml:"sample_rate"`
-		Channels    int `yaml:"channels"`
-		AudioFormat int `yaml:"audio_format"`
-	} `yaml:"audio"`
+	Hotkey               string       `yaml:"hotkey"`
+	RecordingDurationSec float64      `yaml:"recording_duration_sec"`
+	OpenAI               OpenAIConfig `yaml:"openai"`
+	Audio                AudioConfig  `yaml:"audio"`
 }
 
-// LoadConfig reads the configuration file and returns a Config struct
-func LoadConfig(filename string) (*Config, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
+// OpenAIConfig holds OpenAI API-related configuration
+type OpenAIConfig struct {
+	APIKey string `yaml:"api_key,omitempty"`
+	Model  string `yaml:"model"`
+}
 
+// AudioConfig holds audio recording settings
+type AudioConfig struct {
+	SampleRate int `yaml:"sample_rate"`
+	Channels   int `yaml:"channels"`
+	BitDepth   int `yaml:"bit_depth"` // Changed from AudioFormat
+}
+
+// LoadConfig loads the application configuration from yaml files
+func LoadConfig(configPath string) (*Config, error) {
+	// Load main configuration file
 	config := &Config{}
-	err = yaml.Unmarshal(data, config)
+	configData, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
 
-	// Set defaults if not specified
-	if config.OpenAI.Model == "" {
-		config.OpenAI.Model = "whisper-1"
+	err = yaml.Unmarshal(configData, config)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing config file: %w", err)
 	}
-	if config.RecordingDurationSec == 0 {
-		config.RecordingDurationSec = 5.0
-	}
-	if config.Audio.SampleRate == 0 {
-		config.Audio.SampleRate = 16000
-	}
-	if config.Audio.Channels == 0 {
-		config.Audio.Channels = 1
+
+	// Load API key from separate file
+	apiKeyPath := filepath.Join(filepath.Dir(configPath), "apikey.yaml")
+	apiKeyData, err := os.ReadFile(apiKeyPath)
+	if err != nil {
+		// Only warn about missing API key file, don't fail
+		fmt.Printf("Warning: API key file not found at %s\n", apiKeyPath)
+	} else {
+		var apiKeyConfig struct {
+			APIKey string `yaml:"api_key"`
+		}
+		err = yaml.Unmarshal(apiKeyData, &apiKeyConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing API key file: %w", err)
+		}
+		config.OpenAI.APIKey = apiKeyConfig.APIKey
 	}
 
 	return config, nil

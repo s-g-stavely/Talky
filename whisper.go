@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 // WhisperClient handles communication with the OpenAI Whisper API
@@ -29,20 +30,14 @@ type TranscribeResponse struct {
 	Text string `json:"text"`
 }
 
-// Transcribe sends the audio data to the Whisper API and returns the transcription
-func (c *WhisperClient) Transcribe(audioData []byte) (string, error) {
-	// Save audio to a temporary file
-	tempFile, err := os.CreateTemp("", "whisper-audio-*.wav")
+// TranscribeFile sends an audio file to the Whisper API and returns the transcription
+func (c *WhisperClient) TranscribeFile(audioFilePath string) (string, error) {
+	// Open the audio file
+	file, err := os.Open(audioFilePath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to open audio file: %w", err)
 	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
-
-	if _, err = tempFile.Write(audioData); err != nil {
-		return "", err
-	}
-	tempFile.Close() // Close to ensure all data is written
+	defer file.Close()
 
 	// Prepare the request
 	body := &bytes.Buffer{}
@@ -54,13 +49,7 @@ func (c *WhisperClient) Transcribe(audioData []byte) (string, error) {
 	}
 
 	// Add the audio file
-	file, err := os.Open(tempFile.Name())
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	part, err := writer.CreateFormFile("file", "audio.wav")
+	part, err := writer.CreateFormFile("file", filepath.Base(audioFilePath))
 	if err != nil {
 		return "", err
 	}
@@ -104,4 +93,24 @@ func (c *WhisperClient) Transcribe(audioData []byte) (string, error) {
 	}
 
 	return result.Text, nil
+}
+
+// Transcribe sends the audio data to the Whisper API and returns the transcription
+// This is now a wrapper around TranscribeFile that creates a temporary file
+func (c *WhisperClient) Transcribe(audioData []byte) (string, error) {
+	// Save audio to a temporary file
+	tempFile, err := os.CreateTemp("", "whisper-audio-*.wav")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	if _, err = tempFile.Write(audioData); err != nil {
+		return "", err
+	}
+	tempFile.Close() // Close to ensure all data is written
+
+	// Use the new TranscribeFile method
+	return c.TranscribeFile(tempFile.Name())
 }

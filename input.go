@@ -20,8 +20,10 @@ func InsertTextAtCursor(text string) error {
 	}
 
 	// Simulate paste keyboard shortcut
-	robotgo.KeyTap("v", "cmd") // For macOS
-	// For Windows, use: robotgo.KeyTap("v", "ctrl")
+	// robotgo.KeyTap("v", "cmd") // For macOS
+	// For Windows:
+	// TODO is there a better way to paste things?
+	robotgo.KeyTap("v", "ctrl")
 
 	// Small delay to ensure paste completes
 	robotgo.MilliSleep(100)
