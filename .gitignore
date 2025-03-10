@@ -26,5 +26,6 @@ go.work.sum
 
 portaudio/
 
-# Ignore API key file containing sensitive information
 apikey.yaml
+
+/target
