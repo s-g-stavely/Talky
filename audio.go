@@ -41,6 +41,14 @@ func (ar *AudioRecorder) RecordAudio(durationSec float64) ([]int16, error) {
 	inputBuffer := make([]int16, frameSize*ar.Channels)
 	var allSamples []int16
 
+	defaultDevice, err := portaudio.DefaultInputDevice()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default input device. err: %w", err)
+	}
+
+	fmt.Printf("Using default device: %s\n", defaultDevice.Name)
+
 	stream, err := portaudio.OpenDefaultStream(ar.Channels, 0, float64(ar.SampleRate), frameSize, inputBuffer)
 	if err != nil {
 		return nil, err
@@ -117,62 +125,6 @@ func (ar *AudioRecorder) RecordAndSaveWAV(filename string, durationSec float64) 
 	}
 
 	return ar.SaveWaveFile(filename, samples)
-}
-
-// RecordToBytes records audio and returns it as a WAV file in a byte slice
-func (ar *AudioRecorder) RecordToBytesAndSave(durationSec float64, filename string) ([]byte, error) {
-	samples, err := ar.RecordAudio(durationSec)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ar.SaveWaveFile(filename, samples)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Use a buffer to hold the WAV data
-	buf := &bytes.Buffer{}
-
-	// Create a seekable buffer wrapper around our bytes.Buffer
-	seekableBuf := &SeekableBuffer{buf: buf, pos: 0}
-
-	// Create an encoder that writes to our seekable buffer
-	// Make sure we're using a valid bit depth (16 is standard for Whisper)
-	bitDepth := ar.BitDepth
-	if bitDepth != 8 && bitDepth != 16 && bitDepth != 24 && bitDepth != 32 {
-		return nil, fmt.Errorf("unsupported bit depth: %d", bitDepth)
-	}
-
-	enc := wav.NewEncoder(seekableBuf, ar.SampleRate, bitDepth, ar.Channels, 1) // 1 = PCM format
-
-	// Create an audio buffer from our samples
-	audioBuf := &audio.IntBuffer{
-		Format: &audio.Format{
-			NumChannels: ar.Channels,
-			SampleRate:  ar.SampleRate,
-		},
-		Data:           make([]int, len(samples)),
-		SourceBitDepth: bitDepth,
-	}
-
-	// Convert int16 samples to int for the IntBuffer
-	for i, sample := range samples {
-		audioBuf.Data[i] = int(sample)
-	}
-
-	// Write the buffer to the encoder
-	if err := enc.Write(audioBuf); err != nil {
-		return nil, fmt.Errorf("failed to encode audio data: %w", err)
-	}
-
-	// Close the encoder to finalize the WAV header
-	if err := enc.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close encoder: %w", err)
-	}
-
-	return buf.Bytes(), nil
 }
 
 // SeekableBuffer is a wrapper around bytes.Buffer that implements io.WriteSeeker
