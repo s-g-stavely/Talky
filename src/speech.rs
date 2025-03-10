@@ -7,11 +7,13 @@ use std::io::Read;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
+use crate::config::Config;
 
 /// Takes a path to an audio file, sends it to the speech-to-text API,
 /// and returns the transcribed text
-pub fn transcribe_audio(file_path: &str) -> Result<String> {
+pub fn transcribe_audio(file_path: &str, config: &Config) -> Result<String> {
     println!("Preparing to transcribe audio file: {}", file_path);
+    println!("Using API URL: {}", config.api.url);
     
     // Wait a bit longer to ensure file is completely written and closed
     thread::sleep(Duration::from_millis(1000));
@@ -49,12 +51,12 @@ pub fn transcribe_audio(file_path: &str) -> Result<String> {
     // Create multipart form
     let form = Form::new()
         .part("file", Part::bytes(file_content).file_name(file_name.to_string()))
-        .text("temperature", "0.0")
-        .text("temperature_inc", "0.2")
-        .text("response_format", "json");
+        .text("temperature", config.api.temperature.to_string())
+        .text("temperature_inc", config.api.temperature_inc.to_string())
+        .text("response_format", "json".to_string());
     
-    // Send the request
-    let response = client.post("http://127.0.0.1:8080/inference")
+    // Send the request to configured URL
+    let response = client.post(&config.api.url)
         .multipart(form)
         .send()
         .context("Failed to send request to speech-to-text API")?;

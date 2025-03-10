@@ -1,0 +1,9 @@
+
+api:
+  # URL for the speech-to-text API
+  # To use OpenAI's API, set this to "https://api.openai.com/v1/audio/transcriptions"
+  url: "http://127.0.0.1:8080/inference"
+  # Temperature parameter for the API
+  temperature: 0.0
+  # Temperature increment parameter for the API
+  temperature_inc: 0.2

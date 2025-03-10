@@ -8,8 +8,10 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 use std::path::Path;
 use crate::speech;
+use crate::clipboard;
+use crate::config::Config;
 
-pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<()> {
+pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, talky_config: Arc<Config>) -> Result<()> {
     // Get the default host
     let host = cpal::default_host();
     
@@ -20,10 +22,10 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<
     println!("Using input device: {}", device.name()?);
     
     // Get the default input config
-    let config = device.default_input_config()
+    let input_config = device.default_input_config()
         .context("Failed to get default input config")?;
     
-    println!("Default input config: {:?}", config);
+    println!("Default input config: {:?}", input_config);
     
     let mut stream_active = false;
     let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<File>>>>> = None;
@@ -62,8 +64,8 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<
             
             // Create WAV writer with timestamp in filename
             let spec = hound::WavSpec {
-                channels: config.channels(),
-                sample_rate: config.sample_rate().0,
+                channels: input_config.channels(),
+                sample_rate: input_config.sample_rate().0,
                 bits_per_sample: 16,
                 sample_format: hound::SampleFormat::Int,
             };
@@ -79,11 +81,11 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<
             let err_fn = |err| eprintln!("An error occurred on the input audio stream: {}", err);
             
             // Build the input stream
-            let stream = match config.sample_format() {
+            let stream = match input_config.sample_format() {
                 SampleFormat::F32 => {
                     let writer = writer.clone();
                     device.build_input_stream(
-                        &config.config(),
+                        &input_config.config(),
                         move |data: &[f32], _: &_| write_input_data::<f32, i16>(data, &writer),
                         err_fn,
                         None
@@ -92,7 +94,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<
                 SampleFormat::I16 => {
                     let writer = writer.clone();
                     device.build_input_stream(
-                        &config.config(),
+                        &input_config.config(),
                         move |data: &[i16], _: &_| write_input_data::<i16, i16>(data, &writer),
                         err_fn,
                         None
@@ -101,7 +103,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<
                 SampleFormat::U16 => {
                     let writer = writer.clone();
                     device.build_input_stream(
-                        &config.config(),
+                        &input_config.config(),
                         move |data: &[u16], _: &_| write_input_data::<u16, i16>(data, &writer),
                         err_fn,
                         None
@@ -175,9 +177,27 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>) -> Result<
                         
                         // Transcribe in a separate thread
                         let file_path_clone = file_path.clone();
+                        let talky_config_clone = talky_config.clone();
                         thread::spawn(move || {
-                            match speech::transcribe_audio(&file_path_clone) {
-                                Ok(text) => println!("Transcription: {}", text),
+                            match speech::transcribe_audio(&file_path_clone, &talky_config_clone) {
+                                Ok(text) => {
+                                    println!("Transcription: {}", text);
+                                    
+                                    // Copy text to clipboard
+                                    if let Err(e) = clipboard::copy_to_clipboard(&text) {
+                                        eprintln!("Failed to copy text to clipboard: {:?}", e);
+                                    } else {
+                                        println!("Successfully copied transcription to clipboard");
+                                        
+                                        // todo use match, clean up
+                                        if let Err(e) = clipboard::paste_clipboard() {
+                                            eprintln!("Failed to paste text: {:?}", e);
+                                        } else {
+                                            println!("Successfully pasted transcription");
+                                        }
+                                        
+                                    }
+                                },
                                 Err(e) => eprintln!("Failed to transcribe audio: {}", e),
                             }
                         });
