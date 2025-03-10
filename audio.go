@@ -114,6 +114,23 @@ func (ar *AudioRecorder) SaveWaveFile(filename string, samples []int16) error {
 		return fmt.Errorf("failed to write audio data: %w", err)
 	}
 
+	if err = enc.Close(); err != nil {
+		return err
+	}
+
+	if err = out.Close(); err != nil {
+		return err
+	}
+
+	out2, err := os.Open("recording.wav")
+	if err != nil {
+		panic(err)
+	}
+	d2 := wav.NewDecoder(out2)
+	d2.ReadInfo()
+	fmt.Println("New file ->", d2)
+	out2.Close()
+
 	return nil
 }
 

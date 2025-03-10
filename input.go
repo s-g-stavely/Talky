@@ -13,17 +13,8 @@ func InsertTextAtCursor(text string) error {
 		return err
 	}
 
-	// Copy the transcribed text to clipboard
-	err = clipboard.WriteAll(text)
-	if err != nil {
-		return err
-	}
-
-	// Simulate paste keyboard shortcut
-	// robotgo.KeyTap("v", "cmd") // For macOS
-	// For Windows:
-	// TODO is there a better way to paste things?
-	robotgo.KeyTap("v", "ctrl")
+	// output the text at the cursor
+	robotgo.TypeStr(text)
 
 	// Small delay to ensure paste completes
 	robotgo.MilliSleep(100)

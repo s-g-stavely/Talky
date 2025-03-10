@@ -65,7 +65,7 @@ func (c *WhisperClient) TranscribeFile(audioFilePath string) (string, error) {
 
 	// Create the HTTP request
 	// url := "https://api.openai.com/v1/audio/transcriptions"
-	url := "http://127.0.0.1:8080"
+	url := "http://127.0.0.1:8080/inference"
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
 		return "", err
