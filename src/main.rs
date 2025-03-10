@@ -1,5 +1,6 @@
 mod audio;
 mod hotkeys;
+mod speech;
 
 use std::sync::Arc;
 use std::thread;
