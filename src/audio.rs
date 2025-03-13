@@ -9,9 +9,9 @@ use std::time::{Duration, SystemTime};
 use std::path::Path;
 use crate::speech;
 use crate::clipboard;
-use crate::config::Config;
+use crate::config::{Config, ApiKeyConfig};
 
-pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, talky_config: Arc<Config>) -> Result<()> {
+pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, ApiKeyConfig)>) -> Result<()> {
     // Get the default host
     let host = cpal::default_host();
     
@@ -177,9 +177,9 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, talky_conf
                         
                         // Transcribe in a separate thread
                         let file_path_clone = file_path.clone();
-                        let talky_config_clone = talky_config.clone();
+                        let app_config_clone = app_config.clone();
                         thread::spawn(move || {
-                            match speech::transcribe_audio(&file_path_clone, &talky_config_clone) {
+                            match speech::transcribe_audio(&file_path_clone, &app_config_clone) {
                                 Ok(text) => {
                                     println!("Transcription: {}", text);
                                     

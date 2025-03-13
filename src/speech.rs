@@ -1,17 +1,21 @@
 use anyhow::{Context, Result};
 use reqwest::blocking::Client;
 use reqwest::blocking::multipart::{Form, Part};
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use crate::config::Config;
+use crate::config::{Config, ApiKeyConfig};
 
 /// Takes a path to an audio file, sends it to the speech-to-text API,
 /// and returns the transcribed text
-pub fn transcribe_audio(file_path: &str, config: &Config) -> Result<String> {
+pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)>) -> Result<String> {
+    let (config, api_key) = &**app_config;
+    
     println!("Preparing to transcribe audio file: {}", file_path);
     println!("Using API URL: {}", config.api.url);
     
@@ -53,10 +57,28 @@ pub fn transcribe_audio(file_path: &str, config: &Config) -> Result<String> {
         .part("file", Part::bytes(file_content).file_name(file_name.to_string()))
         .text("temperature", config.api.temperature.to_string())
         .text("temperature_inc", config.api.temperature_inc.to_string())
-        .text("response_format", "json".to_string());
+        .text("response_format", "json".to_string())
+        .text("model", "whisper-1".to_string());
     
-    // Send the request to configured URL
+    // Create headers with API key
+    let mut headers = HeaderMap::new();
+    
+    // Format the API key according to the service requirements
+    // Most APIs expect "Bearer {token}" or just the token itself
+    let api_key_value = if api_key.key.starts_with("Bearer ") {
+        api_key.key.clone()
+    } else {
+        format!("Bearer {}", api_key.key)
+    };
+    
+    // Set the API key
+    if let Ok(header_value) = HeaderValue::from_str(&api_key_value) {
+        headers.insert("Authorization", header_value);
+    }
+    
+    // Send the request to configured URL with API key in header
     let response = client.post(&config.api.url)
+        .headers(headers)
         .multipart(form)
         .send()
         .context("Failed to send request to speech-to-text API")?;
