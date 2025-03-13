@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
-use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+use anyhow::Result;
+use clipboard_rs::{Clipboard, ClipboardContext};
 use enigo::{Enigo, Key, Keyboard, Direction};
 use std::thread;
 use std::time::Duration;
@@ -28,20 +28,17 @@ pub fn paste_clipboard() -> Result<()> {
     
     #[cfg(not(target_os = "macos"))]
     {
-        enigo.key(Key::Control, Direction::Press);
-        enigo.key(Key::V, Direction::Click);
-        enigo.key(Key::Control, Direction::Release);
+        enigo.key(Key::Control, Direction::Press)?;
+        enigo.key(Key::V, Direction::Click)?;
+        enigo.key(Key::Control, Direction::Release)?;
     }
     
     Ok(())
 }
 
 /// Copies text to clipboard and then pastes it
-pub fn copy_and_paste(text: &str) -> Result<()> {
-    println!("Copying to clipboard: {}", text);
+pub fn paste_text(text: &str) -> Result<()> {
     copy_to_clipboard(text)?;
-    
-    println!("Pasting clipboard contents...");
     paste_clipboard()?;
     
     Ok(())

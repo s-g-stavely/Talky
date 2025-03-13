@@ -5,7 +5,6 @@ use global_hotkey::{
 };
 use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::keyboard::Key;
 
 pub struct HotkeyListener {
     hotkey_manager: GlobalHotKeyManager,

@@ -5,7 +5,7 @@ use std::fs::File;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use std::path::Path;
 use crate::speech;
 use crate::clipboard;
@@ -45,21 +45,15 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
         
         // Start recording if flag is true and we're not already recording
         if should_record && !stream_active {
-            println!("Flag detected as ON - starting recording");
-            
-            // Create a timestamped filename
-            let timestamp = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
+            println!("Starting recording");
             
             let file_path = if base_ext.is_empty() {
-                format!("{}_{}.wav", base_stem, timestamp)
+                format!("{}.wav", base_stem)
             } else {
-                format!("{}_{}.{}", base_stem, timestamp, base_ext)
+                format!("{}.{}", base_stem, base_ext)
             };
             
-            println!("Starting new recording to file: {}", file_path);
+            println!("Recording to file: {}", file_path);
             current_file_path = Some(file_path.clone());
             
             // Create WAV writer with timestamp in filename
@@ -184,19 +178,9 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
                                     println!("Transcription: {}", text);
                                     
                                     // Copy text to clipboard
-                                    if let Err(e) = clipboard::copy_to_clipboard(&text) {
-                                        eprintln!("Failed to copy text to clipboard: {:?}", e);
-                                    } else {
-                                        println!("Successfully copied transcription to clipboard");
-                                        
-                                        // todo use match, clean up
-                                        if let Err(e) = clipboard::paste_clipboard() {
-                                            eprintln!("Failed to paste text: {:?}", e);
-                                        } else {
-                                            println!("Successfully pasted transcription");
-                                        }
-                                        
-                                    }
+                                    if let Err(e) = clipboard::paste_text(&text) {
+                                        eprintln!("Failed to paste text: {:?}", e);
+                                    } 
                                 },
                                 Err(e) => eprintln!("Failed to transcribe audio: {}", e),
                             }
