@@ -16,11 +16,11 @@ pub struct Config {
 pub struct ApiConfig {
     /// URL for the speech-to-text API
     pub url: String,
-    
-    /// API temperature parameter
+
+
+    // API parameters
+    pub prompt: String,
     pub temperature: f32,
-    
-    /// API temperature increment parameter
     pub temperature_inc: f32,
 }
 
@@ -55,6 +55,7 @@ impl Config {
             // Parse YAML
             let config: Config = serde_yaml::from_str(&contents)
                 .context("Failed to parse config file")?;
+
             
             Ok(config)
         } else {
@@ -78,10 +79,10 @@ impl ApiKeyConfig {
                 .context("Failed to read API key file")?;
             
             // Parse YAML
-            let api_key: ApiKeyConfig = serde_yaml::from_str(&contents)
+            let mut api_key_config: ApiKeyConfig = serde_yaml::from_str(&contents)
                 .context("Failed to parse API key file")?;
             
-            Ok(api_key)
+            Ok(api_key_config)
         } else {
             // Create a default config
             let api_key = ApiKeyConfig::default();

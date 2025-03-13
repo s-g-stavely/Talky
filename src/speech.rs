@@ -53,18 +53,19 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
     println!("Sending file '{}' to speech-to-text API", file_name);
     
     // Create multipart form
-    let form = Form::new()
+    let mut form = Form::new()
         .part("file", Part::bytes(file_content).file_name(file_name.to_string()))
         .text("temperature", config.api.temperature.to_string())
         .text("temperature_inc", config.api.temperature_inc.to_string())
         .text("response_format", "json".to_string())
+        // TODO don't hardcode?
         .text("model", "whisper-1".to_string());
+
+    if config.api.prompt != "" {
+        form = form.text("prompt", config.api.prompt.to_string());
+    }
     
-    // Create headers with API key
-    let mut headers = HeaderMap::new();
-    
-    // Format the API key according to the service requirements
-    // Most APIs expect "Bearer {token}" or just the token itself
+    // Check if the API key is already in Bearer format
     let api_key_value = if api_key.key.starts_with("Bearer ") {
         api_key.key.clone()
     } else {
@@ -72,6 +73,7 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
     };
     
     // Set the API key
+    let mut headers = HeaderMap::new();
     if let Ok(header_value) = HeaderValue::from_str(&api_key_value) {
         headers.insert("Authorization", header_value);
     }
@@ -102,15 +104,16 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
     match serde_json::from_str::<Value>(&response_text) {
         Ok(json) => {
             if let Some(text) = json.get("text").and_then(|t| t.as_str()) {
-                Ok(text.to_string())
+
+                // Strip whitespace and return
+                Ok(text.trim().to_string())
             } else {
-                // If we can't find a "text" field, just return the raw response
-                Ok(response_text)
+                // TODO maybe try to extract error message
+                Err(anyhow::anyhow!(response_text))
             }
         },
         Err(_) => {
-            // If it's not valid JSON, return the raw response
-            Ok(response_text)
+            Err(anyhow::anyhow!(response_text))
         }
     }
 }
