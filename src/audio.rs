@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Sample, SampleFormat};
-use std::io::BufWriter;
+use std::io::{BufWriter, Cursor, Read, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -27,14 +27,13 @@ pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, Ap
     println!("Default input config: {:?}", input_config);
     
     let mut stream_active = false;
-    let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<std::io::Cursor<Vec<u8>>>>>>> = None;
+    let mut file_opt: Option<Cursor<Vec<u8>>> = None;
+    let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<Cursor<Vec<u8>>>>>> = None;
     let mut stream_opt: Option<cpal::Stream> = None;
-    let mut current_file_path: Option<String> = None;
     
     println!("Waiting for hotkey to start recording...");
     println!("Current recording flag state: {}", recording_flag.load(Ordering::SeqCst));
     
-    // Main processing loop that monitors the recording flag    
     loop { 
         let should_record = recording_flag.load(Ordering::SeqCst);
         
@@ -42,10 +41,11 @@ pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, Ap
         if should_record && !stream_active {
             println!("Starting recording");
 
-            let file: std::io::Cursor<Vec<u8>> = std::io::Cursor::new(Vec::new());
-            let buf_writer = BufWriter::new(file);
+            let file = Cursor::new(Vec::new());
+
+            // Create in-memory buffer for WAV data
             
-            // Create WAV writer with timestamp in filename
+            // Create WAV writer with in-memory buffer
             let spec = hound::WavSpec {
                 channels: input_config.channels(),
                 sample_rate: input_config.sample_rate().0,
@@ -54,7 +54,8 @@ pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, Ap
             };
             
             let writer = Arc::new(std::sync::Mutex::new(
-                hound::WavWriter::new(buf_writer, spec)?
+                hound::WavWriter::new(file, spec)
+                    .context("Failed to create WAV writer")?
             ));
             
             writer_opt = Some(writer.clone());
@@ -99,10 +100,11 @@ pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, Ap
             stream_opt = Some(stream);
             stream_active = true;
             println!("Audio stream activated successfully");
-        } 
-        // Stop recording if flag is false and we are currently recording
-        else if !should_record && stream_active {
-            println!("Flag detected as OFF - stopping recording");
+
+            while recording_flag.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(100));
+            }
+
             
             // Stop and drop the stream first
             if let Some(stream) = stream_opt.take() {
@@ -114,74 +116,66 @@ pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, Ap
                 drop(stream);
             }
             
-            // Finalize the WAV file
-            // TODO restructure to not be nested
-            let writer = writer_opt.take();
-            match writer  {
-                Some(writer) => {
+        } 
+        // Stop recording if flag is false and we are currently recording
+        else if !should_record && stream_active {
+            println!("Flag detected as OFF - stopping recording");
+            
+
+            // Process the WAV file
+            if let Some(writer_arc) = writer_opt.take() {
                 println!("Finalizing WAV file");
                 
-                    // Take the writer out of the Arc<Mutex<>>
-                    match Arc::try_unwrap(writer) {
-                        Ok(mutex) => match mutex.into_inner() {
-                            Ok(writer) => {
-                                // Now we own the writer and can finalize it
-                                if let Err(e) = writer.finalize() {
-                                    eprintln!("Error flushing WAV file: {:?}", e);
-                                } else {
-                                    println!("WAV file finalized successfully");
+                // Safely extract the writer
+                match Arc::try_unwrap(writer_arc) {
+                    Ok(mutex) => {
+                        match mutex.into_inner() {
+                            Ok(mut writer) => {
+                                // Finalize writer to complete WAV header
+                                match writer.finalize() {
+                                    Ok(()) => {
+                                        
+                                        // TODO
+                                        // // Check if we recorded any data
+                                        // if buffer_data.len() > 44 { // 44 bytes is the WAV header size
+                                            
+                                        // Transcribe in a separate thread
+                                        let app_config_clone = app_config.clone();
 
-
-                                    thread::spawn(move || {
-                                        match speech::transcribe_audio(&writer., &app_config_clone) {
-                                            Ok(text) => {
-                                                println!("Transcription: {}", text);
-                                                
-                                                // Copy text to clipboard
-                                                if let Err(e) = clipboard::paste_text(&text) {
-                                                    eprintln!("Failed to paste text: {:?}", e);
-                                                } 
-                                            },
-                                            Err(e) => eprintln!("Failed to transcribe audio: {}", e),
-                                        }
-                                    });
+                                        let mut file_to_transcribe = file_opt.take().unwrap();
+                                        
+                                        thread::spawn(move || {
+                                            match speech::transcribe_audio(&mut file_to_transcribe, &app_config_clone) {
+                                                Ok(text) => {
+                                                    if !text.is_empty() {
+                                                        println!("Transcription: {}", text);
+                                                        
+                                                        // Copy text to clipboard and paste
+                                                        if let Err(e) = clipboard::paste_text(&text) {
+                                                            eprintln!("Failed to paste text: {:?}", e);
+                                                        } else {
+                                                            println!("Successfully pasted transcription");
+                                                        }
+                                                    } else {
+                                                        println!("Transcription returned empty text");
+                                                    }
+                                                },
+                                                Err(e) => eprintln!("Failed to transcribe audio: {:?}", e),
+                                            }
+                                        });
+                                    },
+                                    Err(e) => eprintln!("Error finalizing WAV writer: {:?}", e),
                                 }
                             },
-                            Err(e) => {
-                                eprintln!("Error getting inner writer: {:?}", e);
-                            }
-                        },
-                        Err(e) => {
-                            eprintln!("Error unwrapping writer Arc TODO");
+                            Err(e) => eprintln!("Error accessing WAV writer: {:?}", e),
                         }
-                    };
-                }
-                None => {
-                    eprintln!("Error getting writer from Arc");
-                }
-
-            }
-            
-            // Transcribe in a separate thread
-            let app_config_clone = app_config.clone();
-            thread::spawn(move || {
-                match speech::transcribe_audio(&writer, &app_config_clone) {
-                    Ok(text) => {
-                        println!("Transcription: {}", text);
-                        
-                        // Copy text to clipboard
-                        if let Err(e) = clipboard::paste_text(&text) {
-                            eprintln!("Failed to paste text: {:?}", e);
-                        } 
                     },
-                    Err(e) => eprintln!("Failed to transcribe audio: {}", e),
+                    Err(_) => eprintln!("Error accessing WAV writer: still in use by other threads"),
                 }
-            });
-            
-            
+            }
+
             stream_active = false;
-            current_file_path = None;
-            println!("Recording stopped and saved.");
+            println!("Recording stopped");
         }
         
         // Check every 100ms to avoid busy-waiting
@@ -189,7 +183,7 @@ pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, Ap
     }
 }
 
-fn write_input_data<T, U>(input: &[T], writer: &Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<std::io::Cursor<Vec<u8>>>>>>)
+fn write_input_data<T, U>(input: &[T], writer: &Arc<std::sync::Mutex<hound::WavWriter<Cursor<Vec<u8>>>>>)
 where
     T: Sample,
     U: Sample + hound::Sample + cpal::FromSample<T>,
