@@ -45,14 +45,13 @@ fn main() -> Result<()> {
     let recording_clone = recording.clone();
     let app_config_clone = app_config.clone();
     let recording_thread = thread::spawn(move || -> Result<()> {
-        let file_path = ".";
         
         println!("Starting audio thread with recording flag initially: {}", 
                  recording_clone.load(std::sync::atomic::Ordering::SeqCst));
         
         // Start the audio recording system
         // It will internally monitor the recording state flag
-        audio::record_audio(file_path, recording_clone, app_config_clone)
+        audio::record_audio(recording_clone, app_config_clone)
     });
     
     println!("Starting hotkey listener...");

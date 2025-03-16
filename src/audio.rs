@@ -1,17 +1,16 @@
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Sample, SampleFormat};
-use std::fs::File;
+use std::io::BufWriter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::path::Path;
 use crate::speech;
 use crate::clipboard;
 use crate::config::{Config, ApiKeyConfig};
 
-pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, ApiKeyConfig)>) -> Result<()> {
+pub fn record_audio(recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, ApiKeyConfig)>) -> Result<()> {
     // Get the default host
     let host = cpal::default_host();
     
@@ -28,33 +27,23 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
     println!("Default input config: {:?}", input_config);
     
     let mut stream_active = false;
-    let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<File>>>>> = None;
+    let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<std::io::Cursor<Vec<u8>>>>>>> = None;
     let mut stream_opt: Option<cpal::Stream> = None;
     let mut current_file_path: Option<String> = None;
     
     println!("Waiting for hotkey to start recording...");
     println!("Current recording flag state: {}", recording_flag.load(Ordering::SeqCst));
     
-    // Main processing loop that monitors the recording flag
-    let base_path = Path::new(base_path);
-    let base_stem = base_path.file_stem().unwrap_or_default().to_string_lossy();
-    let base_ext = base_path.extension().unwrap_or_default().to_string_lossy();
-    
+    // Main processing loop that monitors the recording flag    
     loop { 
         let should_record = recording_flag.load(Ordering::SeqCst);
         
         // Start recording if flag is true and we're not already recording
         if should_record && !stream_active {
             println!("Starting recording");
-            
-            let file_path = if base_ext.is_empty() {
-                format!("{}.wav", base_stem)
-            } else {
-                format!("{}.{}", base_stem, base_ext)
-            };
-            
-            println!("Recording to file: {}", file_path);
-            current_file_path = Some(file_path.clone());
+
+            let file: std::io::Cursor<Vec<u8>> = std::io::Cursor::new(Vec::new());
+            let buf_writer = BufWriter::new(file);
             
             // Create WAV writer with timestamp in filename
             let spec = hound::WavSpec {
@@ -65,8 +54,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
             };
             
             let writer = Arc::new(std::sync::Mutex::new(
-                hound::WavWriter::create(&file_path, spec)
-                    .context("Failed to create WAV writer")?
+                hound::WavWriter::new(buf_writer, spec)?
             ));
             
             writer_opt = Some(writer.clone());
@@ -126,72 +114,70 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
                 drop(stream);
             }
             
-            // Finalize the WAV file with proper handling
-            let file_path_for_transcription = if let Some(writer) = writer_opt.take() {
+            // Finalize the WAV file
+            // TODO restructure to not be nested
+            let writer = writer_opt.take();
+            match writer  {
+                Some(writer) => {
                 println!("Finalizing WAV file");
                 
-                // Ensure proper finalization
-                let file_path = current_file_path.clone();
-                let finalized = match writer.lock() {
-                    Ok(mut writer_guard) => {
-                        // Call flush instead of finalize as it doesn't take ownership
-                        if let Err(e) = writer_guard.flush() {
-                            eprintln!("Error flushing WAV file: {:?}", e);
-                            false
-                        } else {
-                            println!("WAV file finalized successfully");
-                            true
-                        }
-                        // The writer will be finalized when dropped
-                    },
-                    Err(e) => {
-                        eprintln!("Error locking WAV writer: {:?}", e);
-                        false
-                    }
-                };
-                
-                if finalized {
-                    file_path
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            
-            // Send the file for transcription
-            if let Some(file_path) = file_path_for_transcription {
-                // Longer delay to ensure file is fully written and closed
-                thread::sleep(Duration::from_secs(1));
-                
-                // Verify the file exists and has content before transcribing
-                if let Ok(metadata) = std::fs::metadata(&file_path) {
-                    if metadata.len() > 0 {
-                        println!("Audio file saved: {} ({} bytes)", file_path, metadata.len());
-                        
-                        // Transcribe in a separate thread
-                        let file_path_clone = file_path.clone();
-                        let app_config_clone = app_config.clone();
-                        thread::spawn(move || {
-                            match speech::transcribe_audio(&file_path_clone, &app_config_clone) {
-                                Ok(text) => {
-                                    println!("Transcription: {}", text);
-                                    
-                                    // Copy text to clipboard
-                                    if let Err(e) = clipboard::paste_text(&text) {
-                                        eprintln!("Failed to paste text: {:?}", e);
-                                    } 
-                                },
-                                Err(e) => eprintln!("Failed to transcribe audio: {}", e),
+                    // Take the writer out of the Arc<Mutex<>>
+                    match Arc::try_unwrap(writer) {
+                        Ok(mutex) => match mutex.into_inner() {
+                            Ok(writer) => {
+                                // Now we own the writer and can finalize it
+                                if let Err(e) = writer.finalize() {
+                                    eprintln!("Error flushing WAV file: {:?}", e);
+                                } else {
+                                    println!("WAV file finalized successfully");
+
+
+                                    thread::spawn(move || {
+                                        match speech::transcribe_audio(&writer., &app_config_clone) {
+                                            Ok(text) => {
+                                                println!("Transcription: {}", text);
+                                                
+                                                // Copy text to clipboard
+                                                if let Err(e) = clipboard::paste_text(&text) {
+                                                    eprintln!("Failed to paste text: {:?}", e);
+                                                } 
+                                            },
+                                            Err(e) => eprintln!("Failed to transcribe audio: {}", e),
+                                        }
+                                    });
+                                }
+                            },
+                            Err(e) => {
+                                eprintln!("Error getting inner writer: {:?}", e);
                             }
-                        });
-                    } else {
-                        eprintln!("Recorded file is empty, skipping transcription");
-                    }
-                } else {
-                    eprintln!("Could not access recorded file, skipping transcription");
+                        },
+                        Err(e) => {
+                            eprintln!("Error unwrapping writer Arc TODO");
+                        }
+                    };
                 }
+                None => {
+                    eprintln!("Error getting writer from Arc");
+                }
+
             }
+            
+            // Transcribe in a separate thread
+            let app_config_clone = app_config.clone();
+            thread::spawn(move || {
+                match speech::transcribe_audio(&writer, &app_config_clone) {
+                    Ok(text) => {
+                        println!("Transcription: {}", text);
+                        
+                        // Copy text to clipboard
+                        if let Err(e) = clipboard::paste_text(&text) {
+                            eprintln!("Failed to paste text: {:?}", e);
+                        } 
+                    },
+                    Err(e) => eprintln!("Failed to transcribe audio: {}", e),
+                }
+            });
+            
             
             stream_active = false;
             current_file_path = None;
@@ -203,7 +189,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
     }
 }
 
-fn write_input_data<T, U>(input: &[T], writer: &Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<File>>>>)
+fn write_input_data<T, U>(input: &[T], writer: &Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<std::io::Cursor<Vec<u8>>>>>>)
 where
     T: Sample,
     U: Sample + hound::Sample + cpal::FromSample<T>,
