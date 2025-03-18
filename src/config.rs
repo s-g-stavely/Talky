@@ -59,7 +59,28 @@ impl Config {
             
             Ok(config)
         } else {
-            Err(anyhow::anyhow!("Config file not found: {}", path.display()))
+            println!("Config file not found, creating default config at {}", path.display());
+
+            let default_config = r#"
+api:
+  # URL for the speech-to-text API
+  # To use a local model, set this to the address of the model such as "localhost:8080"
+  url: "https://api.openai.com/v1/audio/transcriptions"
+
+  # To understand these, see https://platform.openai.com/docs/api-reference/audio/createTranscription
+  prompt: ""
+  temperature: 0.0
+  temperature_inc: 0.2"#;
+
+            //write the string directly to the config file path
+            std::fs::write(path, default_config)
+                .context(format!("Failed to write default config file: {}", path.display()))?;
+
+            let config: Config = serde_yaml::from_str(default_config)
+                .context("Failed to parse default config file")?;
+            
+            Ok(config)
+
         }
     }
 }
@@ -79,7 +100,7 @@ impl ApiKeyConfig {
                 .context("Failed to read API key file")?;
             
             // Parse YAML
-            let mut api_key_config: ApiKeyConfig = serde_yaml::from_str(&contents)
+            let api_key_config: ApiKeyConfig = serde_yaml::from_str(&contents)
                 .context("Failed to parse API key file")?;
             
             Ok(api_key_config)
@@ -89,7 +110,6 @@ impl ApiKeyConfig {
             ApiKeyConfig::save(&api_key, path)?;
             
             println!("Created default API key file at: {}", path.display());
-            println!("⚠️  Please edit this file and add your actual API key.");
             
             Ok(api_key)
         }

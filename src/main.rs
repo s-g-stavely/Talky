@@ -24,9 +24,7 @@ fn main() -> Result<()> {
     
     println!("API URL: {}", config.api.url);
     if api_key.key == "YOUR_API_KEY_HERE" {
-        println!("Warning: Using placeholder API key. Please edit apikey.yaml with your actual key.");
-    } else {
-        println!("API Key: {}...", api_key.key.chars().take(5).collect::<String>());
+        println!("Warning: Using placeholder API key. Please edit apikey.yaml with your actual key, unless you are using a local model.");
     }
     
     println!("Press Ctrl+Shift+Space to start/stop recording");

@@ -19,9 +19,6 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
     println!("Preparing to transcribe audio file: {}", file_path);
     println!("Using API URL: {}", config.api.url);
     
-    // Wait a bit longer to ensure file is completely written and closed
-    thread::sleep(Duration::from_millis(1000));
-    
     // Create a reqwest client
     let client = Client::new();
     
@@ -84,6 +81,10 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
         .multipart(form)
         .send()
         .context("Failed to send request to speech-to-text API")?;
+
+    // Delete the file
+    std::fs::remove_file(file_path)
+        .context(format!("Failed to delete file: {}", file_path.display()))?;
     
     // Check if the request was successful
     if !response.status().is_success() {

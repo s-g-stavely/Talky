@@ -31,6 +31,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
     let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<File>>>>> = None;
     let mut stream_opt: Option<cpal::Stream> = None;
     let mut current_file_path: Option<String> = None;
+    let mut file_count = 1;
     
     println!("Waiting for hotkey to start recording...");
     println!("Current recording flag state: {}", recording_flag.load(Ordering::SeqCst));
@@ -47,11 +48,14 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
         if should_record && !stream_active {
             println!("Starting recording");
             
+            // TODO delete all files on startup 
             let file_path = if base_ext.is_empty() {
-                format!("{}.wav", base_stem)
+                format!("{}_{}.wav", base_stem, file_count)
             } else {
-                format!("{}.{}", base_stem, base_ext)
+                format!("{}_{}.{}", base_stem, file_count, base_ext)
             };
+
+            file_count += 1;
             
             println!("Recording to file: {}", file_path);
             current_file_path = Some(file_path.clone());
@@ -161,8 +165,6 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
             
             // Send the file for transcription
             if let Some(file_path) = file_path_for_transcription {
-                // Longer delay to ensure file is fully written and closed
-                thread::sleep(Duration::from_secs(1));
                 
                 // Verify the file exists and has content before transcribing
                 if let Ok(metadata) = std::fs::metadata(&file_path) {
