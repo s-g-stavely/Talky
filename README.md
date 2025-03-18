@@ -22,5 +22,6 @@ create release package
 put in tray
 make hotkey configurable
 make exiting via ctrl c better
+if you run two copies at once get "hotkey already registerd", fail more gracefully
 
 it's maybe weird to be using winit when there's no GUI
