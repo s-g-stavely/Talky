@@ -48,29 +48,20 @@ impl HotkeyListener {
         
         // Important: Create the receiver after registering hotkeys
         let hotkey_channel = GlobalHotKeyEvent::receiver();
+
+        event_loop.set_control_flow(ControlFlow::Wait);
         
-        event_loop.run(move |event, elwt| {
-            elwt.set_control_flow(ControlFlow::Wait);
+        event_loop.run(move |_, _| {
             
-            // Check for events from winit
-            match event {
-                winit::event::Event::NewEvents(_) => {
-                    // Check for hotkey events
-                    if let Ok(event) = hotkey_channel.try_recv() {
-                        if event.id == hotkey_id {
-                            // Toggle recording state when hotkey is pressed
-                            let current_state = recording_state.load(Ordering::SeqCst);
-                            let new_state = !current_state;
-                            recording_state.store(new_state, Ordering::SeqCst);
-                            
-                            println!("Hotkey pressed! Recording state changed to: {}", new_state);
-                        }
-                    }
+            if let Ok(event) = hotkey_channel.try_recv() {
+                if event.id == hotkey_id && event.state() == global_hotkey::HotKeyState::Pressed {
+                    // Toggle recording state when hotkey is pressed
+                    let current_state = recording_state.load(Ordering::SeqCst);
+                    let new_state = !current_state;
+                    recording_state.store(new_state, Ordering::SeqCst);
+                    
+                    println!("Hotkey pressed! Recording state changed to: {}", new_state);
                 }
-                winit::event::Event::LoopExiting => {
-                    println!("Exiting event loop");
-                }
-                _ => {}
             }
         })?;
         

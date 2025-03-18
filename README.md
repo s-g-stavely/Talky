@@ -1,6 +1,6 @@
 # Talky
 
-Talky lets you type using your voice, on Windows, Mac and Linux. It uses OpenAI's speech-to-text model, Whisper, to convert your speech into text, which is pasted into whatever app you're using. 
+Talky lets you type using your voice, on Windows, Mac and Linux (X11 only due to hotkey library TODO). It uses OpenAI's speech-to-text model, Whisper, to convert your speech into text, which is pasted into whatever app you're using. 
 
 ## Installation
 
@@ -23,3 +23,5 @@ put in tray
 fix bug with not picking up first press
 make hotkey configurable
 make exiting via ctrl c better
+
+it's maybe weird to be using winit when there's no GUI
