@@ -2,10 +2,9 @@ use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Sample, SampleFormat};
 use std::fs::File;
-use std::io::{BufWriter, Cursor, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::{self, current};
+use std::thread::{self};
 use std::time::Duration;
 use std::path::Path;
 use crate::speech;
@@ -124,59 +123,50 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
             // Stop and drop the stream first
             if let Some(stream) = stream_opt.take() {
                 println!("Stopping audio stream");
-                // Explicitly stop the stream before dropping
+                // Explicitly stop the stream before dropping TODO why?
                 if let Err(e) = stream.pause() {
                     eprintln!("Error stopping stream: {:?}", e);
                 }
                 drop(stream);
             }
 
-            // Process the WAV file
-            if let Some(writer_arc) = writer_opt.take() {
-                println!("Finalizing WAV file");
-                
-                // Try to get exclusive ownership of the Arc
-                match Arc::try_unwrap(writer_arc) {
-                    Ok(mutex) => {
-                        // Try to get exclusive ownership of the mutex
-                        match mutex.into_inner() {
-                            Ok(writer) => {
-                                // Now we have ownership of the WavWriter and can call finalize
-                                match writer.finalize() {
-                                    Ok(()) => {
-                                        let file_path_clone = match current_file_path.clone() {
-                                            Some(path) => path,
-                                            None => {
-                                                // TODO should fail
-                                                eprintln!("Failed to get current file path");
-                                                continue;
-                                            }
-                                        };
-                                        let app_config_clone = app_config.clone();
-                                        thread::spawn(move || {
-                                            match speech::transcribe_audio(&file_path_clone, &app_config_clone) {
-                                                Ok(text) => {
-                                                    println!("Transcription: {}", text);
-                                                    
-                                                    // Copy text to clipboard
-                                                    if let Err(e) = clipboard::paste_text(&text) {
-                                                        eprintln!("Failed to paste text: {:?}", e);
-                                                    } 
-                                                },
-                                                Err(e) => eprintln!("Failed to transcribe audio: {:?}", e),
-                                            }
-                                        });
-                                    },
-                                    Err(e) => eprintln!("Failed to finalize WAV writer: {:?}", e),
-                                }
-                            },
-                            Err(e) => eprintln!("Failed to acquire lock on WAV writer: {:?}", e),
-                        }
-                    },
-                    Err(_) => eprintln!("Failed to get exclusive ownership of WAV writer"),
-                }
-            }
+            // Get ownership of the WAV writer so that we can finalize it
 
+            let Some(writer_arc) = writer_opt.take() else {
+                return Err(anyhow::anyhow!("Writer arc is empty"));
+            };
+
+            let Ok(mutex) = Arc::try_unwrap(writer_arc) else {
+                return Err(anyhow::anyhow!("Failed to get mutex of the wav writer"));
+            };
+
+            let Ok(writer) = mutex.into_inner() else {
+                return Err(anyhow::anyhow!("Failed to get WAV writer"));
+            };
+
+            writer.finalize()?;
+
+            // Transcribe the audio in a separate thread
+
+            let Some(file_path_clone) = current_file_path.clone() else {
+                return Err(anyhow::anyhow!("current_file_path is empty"));
+            };
+
+            let app_config_clone = app_config.clone();
+
+            thread::spawn(move || {
+                match speech::transcribe_audio(&file_path_clone, &app_config_clone) {
+                    Ok(text) => {
+                        println!("Transcription: {}", text);
+                        
+                        if let Err(e) = clipboard::paste_text(&text) {
+                            eprintln!("Failed to paste text: {:?}", e);
+                        } 
+                    },
+                    Err(e) => eprintln!("Failed to transcribe audio: {:?}", e),
+                }
+            });
+                
             stream_active = false;
             current_file_path = None;
             println!("Recording stopped and saved.");

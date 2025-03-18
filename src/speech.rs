@@ -7,8 +7,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 use crate::config::{Config, ApiKeyConfig};
 
 /// Takes a path to an audio file, sends it to the speech-to-text API,
@@ -106,8 +104,9 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
         Ok(json) => {
             if let Some(text) = json.get("text").and_then(|t| t.as_str()) {
 
-                // Strip whitespace and return
-                Ok(text.trim().to_string())
+                // Strip whitespace and return. We leave a space at the end so that 
+                // there's a space between this transcription and the next one
+                Ok(text.trim().to_string() + " ")
             } else {
                 // TODO maybe try to extract error message
                 Err(anyhow::anyhow!(response_text))
