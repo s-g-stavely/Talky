@@ -54,11 +54,9 @@ fn main() -> Result<()> {
     });
     
     println!("Starting hotkey listener...");
-    
-    // Run the hotkey listener (this will block the main thread)
     hotkey_listener.run()?;
     
-    // Wait for recording thread to finish
+    // Wait for recording thread to finish TODO this is never reached because we block the main thread
     if let Err(e) = recording_thread.join().unwrap() {
         eprintln!("Recording error: {:?}", e);
     }

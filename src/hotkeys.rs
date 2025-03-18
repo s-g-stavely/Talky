@@ -41,6 +41,7 @@ impl HotkeyListener {
         self.recording_state.clone()
     }
         
+    // Runs the hotkey listener event loop. This call will block.
     pub fn run(self) -> Result<()> {
         let recording_state = self.recording_state.clone();
         let event_loop = EventLoop::new()?;

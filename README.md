@@ -20,7 +20,6 @@ tell it not to output silence
 chloe saw the end PCM bug again
 create release package
 put in tray
-fix bug with not picking up first press
 make hotkey configurable
 make exiting via ctrl c better
 
