@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     
     // Initialize hotkey listener
     let mut hotkey_listener = HotkeyListener::new()?;
-    hotkey_listener.setup_hotkey()?;
+    hotkey_listener.setup_hotkey(&config.api.hotkey)?;
     
     // Get shared recording state
     let recording = hotkey_listener.get_recording_state();

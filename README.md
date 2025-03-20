@@ -14,6 +14,13 @@ TODO config file, running locally
 https://huggingface.co/Mozilla/whisperfile/blob/main/whisper-tiny.en.llamafile
 
 
+## Development
+
+### Linux
+
+`sudo apt install pkg-config libssl-dev`
+
+
 ## TODOs
 run locally without webserver?
 tell it not to output silence
@@ -23,5 +30,6 @@ put in tray
 make hotkey configurable
 make exiting via ctrl c better
 if you run two copies at once get "hotkey already registerd", fail more gracefully
+config file should handle updates with new vals
 
 it's maybe weird to be using winit when there's no GUI

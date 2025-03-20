@@ -17,6 +17,8 @@ pub struct ApiConfig {
     /// URL for the speech-to-text API
     pub url: String,
 
+    // Hotkey to trigger recording
+    pub hotkey: String,
 
     // API parameters
     pub prompt: String,
@@ -66,6 +68,8 @@ api:
   # URL for the speech-to-text API
   # To use a local model, set this to the address of the model such as "localhost:8080"
   url: "https://api.openai.com/v1/audio/transcriptions"
+
+  hotkey: "ctrl+shift+space"
 
   # To understand these, see https://platform.openai.com/docs/api-reference/audio/createTranscription
   prompt: ""

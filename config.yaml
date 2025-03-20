@@ -4,6 +4,8 @@ api:
   # To use a local model, set this to the address of the model such as "localhost:8080"
   url: "https://api.openai.com/v1/audio/transcriptions"
 
+  hotkey: "ctrl+shift+space"
+
   # To understand these, see https://platform.openai.com/docs/api-reference/audio/createTranscription
   prompt: ""
   temperature: 0.0

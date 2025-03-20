@@ -3,7 +3,7 @@ use global_hotkey::{
     hotkey::{HotKey, Modifiers},
     GlobalHotKeyEvent, GlobalHotKeyManager,
 };
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+use std::{str::FromStr, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub struct HotkeyListener {
@@ -24,13 +24,9 @@ impl HotkeyListener {
         })
     }
     
-    pub fn setup_hotkey(&mut self) -> Result<()> {
-        // Define Ctrl+Shift+Space hotkey
-        let hotkey = HotKey::new(
-            Some(Modifiers::CONTROL | Modifiers::SHIFT),
-            global_hotkey::hotkey::Code::Space,
-        );
-        
+    pub fn setup_hotkey(&mut self, hotkey_string: &String) -> Result<()> {
+
+        let hotkey = HotKey::from_str(hotkey_string)?;
         self.hotkey_id = hotkey.id();
         self.hotkey_manager.register(hotkey)?;
         
