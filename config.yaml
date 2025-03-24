@@ -7,6 +7,9 @@ api:
   hotkey: "ctrl+shift+space"
 
   # To understand these, see https://platform.openai.com/docs/api-reference/audio/createTranscription
+  model: "gpt-4o-transcribe"
   prompt: ""
   temperature: 0.0
   temperature_inc: 0.2
+
+  

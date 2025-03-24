@@ -22,14 +22,12 @@ https://huggingface.co/Mozilla/whisperfile/blob/main/whisper-tiny.en.llamafile
 
 
 ## TODOs
-run locally without webserver?
-tell it not to output silence
-chloe saw the end PCM bug again
-create release package
-put in tray
-make hotkey configurable
-make exiting via ctrl c better
-if you run two copies at once get "hotkey already registerd", fail more gracefully
-config file should handle updates with new vals
-
-it's maybe weird to be using winit when there's no GUI
+- run locally without webserver?
+- create release package
+- put in tray
+- make exiting via ctrl c better
+- if you run two copies at once get "hotkey already registerd", fail more gracefully
+- config file should handle updates with new vals
+- remove log messages and make api key log clearer
+- print hotkey
+- it's maybe weird to be using winit when there's no GUI

@@ -53,8 +53,7 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
         .text("temperature", config.api.temperature.to_string())
         .text("temperature_inc", config.api.temperature_inc.to_string())
         .text("response_format", "json".to_string())
-        // TODO don't hardcode?
-        .text("model", "whisper-1".to_string());
+        .text("model", config.api.model.to_string());
 
     if config.api.prompt != "" {
         form = form.text("prompt", config.api.prompt.to_string());

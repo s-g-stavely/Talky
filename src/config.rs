@@ -20,7 +20,9 @@ pub struct ApiConfig {
     // Hotkey to trigger recording
     pub hotkey: String,
 
+
     // API parameters
+    pub model: String,
     pub prompt: String,
     pub temperature: f32,
     pub temperature_inc: f32,
@@ -72,6 +74,7 @@ api:
   hotkey: "ctrl+shift+space"
 
   # To understand these, see https://platform.openai.com/docs/api-reference/audio/createTranscription
+  model: "whisper-1"
   prompt: ""
   temperature: 0.0
   temperature_inc: 0.2"#;
