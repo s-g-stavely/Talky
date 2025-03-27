@@ -11,12 +11,16 @@ use anyhow::Result;
 use hotkeys::HotkeyListener;
 use config::{Config, ApiKeyConfig};
 use std::fs;
+use log::*;
 
 
-fn main() -> Result<()> {    
+fn main() -> Result<()> { 
+    // TODO stderrlog can get verbosity from args, either do that or from config or whatever
+    stderrlog::new().module(module_path!()).verbosity(log::Level::Info).init().unwrap();
+
     // Load configuration
     let config_path = Path::new("config.yaml");
-    println!("Loading configuration from: {}", config_path.display());
+    debug!("Loading configuration from: {}", config_path.display());
     let config = Config::load(config_path)?;
     let file_path = "recording";
 
@@ -24,15 +28,15 @@ fn main() -> Result<()> {
     
     // Load API key
     let api_key_path = Path::new("apikey.yaml");
-    println!("Loading API key from: {}", api_key_path.display());
+    debug!("Loading API key from: {}", api_key_path.display());
     let api_key = ApiKeyConfig::load(api_key_path)?;
     
-    println!("API URL: {}", config.api.url);
+    debug!("API URL: {}", config.api.url);
     if api_key.key == "YOUR_API_KEY_HERE" {
-        println!("Warning: Using placeholder API key. Please edit apikey.yaml with your actual key, unless you are using a local model.");
+        warn!("Warning: Using placeholder API key. Please edit apikey.yaml with your actual key, unless you are using a local model.");
     }
     
-    println!("Press Ctrl+Shift+Space to start/stop recording");
+    info!("Press Ctrl+Shift+Space to start/stop recording");
     
     // Initialize hotkey listener
     let mut hotkey_listener = HotkeyListener::new()?;
@@ -49,7 +53,7 @@ fn main() -> Result<()> {
     let app_config_clone = app_config.clone();
     let recording_thread = thread::spawn(move || -> Result<()> {
         
-        println!("Starting audio thread with recording flag initially: {}", 
+        debug!("Starting audio thread with recording flag initially: {}", 
                  recording_clone.load(std::sync::atomic::Ordering::SeqCst));
         
         // Start the audio recording system
@@ -57,18 +61,19 @@ fn main() -> Result<()> {
         audio::record_audio(file_path, recording_clone, app_config_clone)
     });
     
-    println!("Starting hotkey listener...");
+    debug!("Starting hotkey listener...");
     hotkey_listener.run()?;
     
     // Wait for recording thread to finish TODO this is never reached because we block the main thread
     if let Err(e) = recording_thread.join().unwrap() {
-        eprintln!("Recording error: {:?}", e);
+        error!("Recording error: {:?}", e);
     }
     
     Ok(())
 }
 
 // Deletes wav files with the given prefix in the current directory
+// TODO seems dangerous? maybe pick a prefix that is unlikely to match other files
 fn cleanup_wav_files(file_prefix: &str) -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let entries = fs::read_dir(&current_dir)?;
@@ -83,7 +88,7 @@ fn cleanup_wav_files(file_prefix: &str) -> Result<()> {
             if let Some(file_name) = path.file_name() {
                 let file_name_str = file_name.to_string_lossy();
                 if file_name_str.starts_with(file_prefix) && file_name_str.ends_with(".wav") {
-                    println!("Removing file: {}", path.display());
+                    debug!("Removing file: {}", path.display());
                     fs::remove_file(path)?;
                 }
             }

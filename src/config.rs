@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use log::*;
 
 /// Application configuration loaded from config.yaml
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -63,7 +64,7 @@ impl Config {
             
             Ok(config)
         } else {
-            println!("Config file not found, creating default config at {}", path.display());
+            info!("Config file not found, creating default config at {}", path.display());
 
             let default_config = r#"
 api:
@@ -116,7 +117,7 @@ impl ApiKeyConfig {
             let api_key = ApiKeyConfig::default();
             ApiKeyConfig::save(&api_key, path)?;
             
-            println!("Created default API key file at: {}", path.display());
+            info!("Created default API key file at: {}", path.display());
             
             Ok(api_key)
         }

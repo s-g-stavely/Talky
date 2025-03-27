@@ -10,6 +10,7 @@ use std::path::Path;
 use crate::speech;
 use crate::clipboard;
 use crate::config::{Config, ApiKeyConfig};
+use log::*;
 
 pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config: Arc<(Config, ApiKeyConfig)>) -> Result<()> {
     // Get the default host
@@ -19,13 +20,13 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
     let device = host.default_input_device()
         .context("Failed to get default input device")?;
     
-    println!("Using input device: {}", device.name()?);
+    debug!("Using input device: {}", device.name()?);
     
     // Get the default input config
     let input_config = device.default_input_config()
         .context("Failed to get default input config")?;
     
-    println!("Default input config: {:?}", input_config);
+    debug!("Default input config: {:?}", input_config);
     
     let mut stream_active = false;
     let mut writer_opt: Option<Arc<std::sync::Mutex<hound::WavWriter<std::io::BufWriter<File>>>>> = None;
@@ -33,8 +34,8 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
     let mut current_file_path: Option<String> = None;
     let mut file_count = 1;
     
-    println!("Waiting for hotkey to start recording...");
-    println!("Current recording flag state: {}", recording_flag.load(Ordering::SeqCst));
+    debug!("Waiting for hotkey to start recording...");
+    debug!("Current recording flag state: {}", recording_flag.load(Ordering::SeqCst));
     
     // Main processing loop that monitors the recording flag
     let base_path = Path::new(base_path);
@@ -46,7 +47,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
         
         // Start recording if flag is true and we're not already recording
         if should_record && !stream_active {
-            println!("Starting recording");
+            debug!("Starting recording");
             
             // TODO delete all files on startup 
             let file_path = if base_ext.is_empty() {
@@ -57,7 +58,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
 
             file_count += 1;
             
-            println!("Recording to file: {}", file_path);
+            debug!("Recording to file: {}", file_path);
             current_file_path = Some(file_path.clone());
             
             // Create WAV writer with timestamp in filename
@@ -76,7 +77,7 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
             writer_opt = Some(writer.clone());
             
             // Create error callback
-            let err_fn = |err| eprintln!("An error occurred on the input audio stream: {}", err);
+            let err_fn = |err| error!("An error occurred on the input audio stream: {}", err);
             
             // Build the input stream
             let stream = match input_config.sample_format() {
@@ -114,18 +115,18 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
             stream.play()?;
             stream_opt = Some(stream);
             stream_active = true;
-            println!("Audio stream activated successfully");
+            debug!("Audio stream activated successfully");
         } 
         // Stop recording if flag is false and we are currently recording
         else if !should_record && stream_active {
-            println!("Flag detected as OFF - stopping recording");
+            debug!("Flag detected as OFF - stopping recording");
             
             // Stop and drop the stream first
             if let Some(stream) = stream_opt.take() {
-                println!("Stopping audio stream");
+                debug!("Stopping audio stream");
                 // Explicitly stop the stream before dropping TODO why?
                 if let Err(e) = stream.pause() {
-                    eprintln!("Error stopping stream: {:?}", e);
+                    error!("Error stopping stream: {:?}", e);
                 }
                 drop(stream);
             }
@@ -157,19 +158,19 @@ pub fn record_audio(base_path: &str, recording_flag: Arc<AtomicBool>, app_config
             thread::spawn(move || {
                 match speech::transcribe_audio(&file_path_clone, &app_config_clone) {
                     Ok(text) => {
-                        println!("Transcription: {}", text);
+                        info!("Transcription: {}", text);
                         
                         if let Err(e) = clipboard::paste_text(&text) {
-                            eprintln!("Failed to paste text: {:?}", e);
+                            error!("Failed to paste text: {:?}", e);
                         } 
                     },
-                    Err(e) => eprintln!("Failed to transcribe audio: {:?}", e),
+                    Err(e) => error!("Failed to transcribe audio: {:?}", e),
                 }
             });
                 
             stream_active = false;
             current_file_path = None;
-            println!("Recording stopped and saved.");
+            debug!("Recording stopped and saved.");
         }
         
         // Check every 100ms to avoid busy-waiting
@@ -186,7 +187,7 @@ where
         for &sample in input.iter() {
             let sample: U = sample.to_sample();
             if let Err(e) = guard.write_sample(sample) {
-                eprintln!("Error writing audio sample: {:?}", e);
+                error!("Error writing audio sample: {:?}", e);
                 return;
             }
         }

@@ -1,10 +1,11 @@
 use anyhow::Result;
 use global_hotkey::{
-    hotkey::{HotKey, Modifiers},
+    hotkey::HotKey,
     GlobalHotKeyEvent, GlobalHotKeyManager,
 };
 use std::{str::FromStr, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 use winit::event_loop::{ControlFlow, EventLoop};
+use log::*;
 
 pub struct HotkeyListener {
     hotkey_manager: GlobalHotKeyManager,
@@ -57,7 +58,10 @@ impl HotkeyListener {
                     let new_state = !current_state;
                     recording_state.store(new_state, Ordering::SeqCst);
                     
-                    println!("Hotkey pressed! Recording state changed to: {}", new_state);
+                    match new_state {
+                        true => info!("Recording started"),
+                        false => info!("Recording stopped"),
+                    }
                 }
             }
         })?;

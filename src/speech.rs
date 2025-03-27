@@ -8,14 +8,15 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use crate::config::{Config, ApiKeyConfig};
+use log::*;
 
 /// Takes a path to an audio file, sends it to the speech-to-text API,
 /// and returns the transcribed text
 pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)>) -> Result<String> {
     let (config, api_key) = &**app_config;
     
-    println!("Preparing to transcribe audio file: {}", file_path);
-    println!("Using API URL: {}", config.api.url);
+    debug!("Preparing to transcribe audio file: {}", file_path);
+    debug!("Using API URL: {}", config.api.url);
     
     // Create a reqwest client
     let client = Client::new();
@@ -29,7 +30,7 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
         return Err(anyhow::anyhow!("Audio file is empty"));
     }
     
-    println!("Audio file size: {} bytes", metadata.len());
+    debug!("Audio file size: {} bytes", metadata.len());
     
     // Open the file
     let mut file = File::open(file_path)
@@ -45,7 +46,7 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
         .and_then(|name| name.to_str())
         .unwrap_or("audio.wav");
     
-    println!("Sending file '{}' to speech-to-text API", file_name);
+    debug!("Sending file '{}' to speech-to-text API", file_name);
     
     // Create multipart form
     let mut form = Form::new()
@@ -96,7 +97,7 @@ pub fn transcribe_audio(file_path: &str, app_config: &Arc<(Config, ApiKeyConfig)
     
     // Parse the response
     let response_text = response.text().context("Failed to read response text")?;
-    println!("Raw API response: {}", response_text);
+    debug!("Raw API response: {}", response_text);
     
     // Try to parse as JSON to extract the text field
     match serde_json::from_str::<Value>(&response_text) {
